@@ -45,17 +45,15 @@
       <div v-if="result" class="translation-result">
         <div class="result-row">
           <div class="result-label">English</div>
-          <div class="result-text">{{ result.english }}</div>
+          <div class="result-text">{{ result.source }}</div>
         </div>
         <div class="result-row">
           <div class="result-label">Paiute</div>
-          <div class="result-text paiute-text">{{ result.paiute }}</div>
+          <div class="result-text paiute-text">{{ result.target }}</div>
         </div>
-        <div v-if="result.message" class="result-message success">
-          {{ result.message }}
-        </div>
-        <div v-if="result.warning" class="result-message warning">
-          {{ result.warning }}
+        <div v-if="result.back_translation" class="result-row">
+          <div class="result-label">Back-translation</div>
+          <div class="result-text">{{ result.back_translation.source }}</div>
         </div>
       </div>
 
@@ -67,7 +65,7 @@
 </template>
 
 <script>
-import { translateEnglish } from '../services/api'
+import { translatePipeline } from '../services/api'
 
 export default {
   name: 'Translator',
@@ -91,7 +89,7 @@ export default {
       this.result = null
 
       try {
-        this.result = await translateEnglish(this.inputText)
+        this.result = await translatePipeline(this.inputText)
       } catch (err) {
         this.error = err.message
       } finally {

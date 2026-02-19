@@ -6,258 +6,191 @@
         <p class="subtitle">Build grammatically correct Owens Valley Paiute sentences by selecting components</p>
       </div>
 
-      <!-- Builder Grid -->
-      <div class="builder-grid">
-        <!-- Subject Column -->
-        <div class="builder-column subject-column">
-          <h2 class="column-title">
-            Subject
-            <button class="help-button" @click="showHelp('subject')" title="Help">?</button>
-          </h2>
-          <div class="dropdown-group">
-            <label>Subject</label>
-            <select v-model="selections.subject_noun" @change="updateChoices" :disabled="!choices.subject_noun || Object.keys(choices.subject_noun.choices).length === 0">
-              <option value="">Select...</option>
-              <option v-for="[key, label] in choices.subject_noun?.choices || []" :key="key" :value="key">
-                {{ label }}
-              </option>
-            </select>
-          </div>
-          <div class="dropdown-group">
-            <label>Suffix</label>
-            <select v-model="selections.subject_suffix" @change="updateChoices" :disabled="choices.subject_suffix?.requirement === 'disabled'">
-              <option value="">Select...</option>
-              <option v-for="[key, label] in choices.subject_suffix?.choices || []" :key="key" :value="key">
-                {{ label }}
-              </option>
-            </select>
-          </div>
-        </div>
+      <div v-if="loading" class="loading">Loading sentence types...</div>
 
-        <!-- Object Column -->
-        <div class="builder-column object-column">
-          <h2 class="column-title">
-            Object
-            <button class="help-button" @click="showHelp('object')" title="Help">?</button>
-          </h2>
-          <div class="dropdown-group">
-            <label>Object</label>
-            <select v-model="selections.object_noun" @change="updateChoices" :disabled="choices.object_noun?.requirement === 'disabled'">
-              <option value="">Select...</option>
-              <option v-for="[key, label] in choices.object_noun?.choices || []" :key="key" :value="key">
-                {{ label }}
-              </option>
-            </select>
-          </div>
-          <div class="dropdown-group">
-            <label>Suffix</label>
-            <select v-model="selections.object_suffix" @change="updateChoices" :disabled="choices.object_suffix?.requirement === 'disabled'">
-              <option value="">Select...</option>
-              <option v-for="[key, label] in choices.object_suffix?.choices || []" :key="key" :value="key">
-                {{ label }}
-              </option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Verb Column -->
-        <div class="builder-column verb-column">
-          <h2 class="column-title">
-            Verb
-            <button class="help-button" @click="showHelp('verb')" title="Help">?</button>
-          </h2>
-          <div class="dropdown-row">
-            <div class="dropdown-group">
-              <label>Pronoun</label>
-              <select v-model="selections.object_pronoun" @change="updateChoices" :disabled="choices.object_pronoun?.requirement === 'disabled'">
-                <option value="">Select...</option>
-                <option v-for="[key, label] in choices.object_pronoun?.choices || []" :key="key" :value="key">
-                  {{ label }}
-                </option>
-              </select>
-            </div>
-            <div class="dropdown-group">
-              <label>Verb</label>
-              <select v-model="selections.verb" @change="updateChoices" :disabled="!choices.verb || Object.keys(choices.verb.choices).length === 0">
-                <option value="">Select...</option>
-                <option v-for="[key, label] in choices.verb?.choices || []" :key="key" :value="key">
-                  {{ label }}
-                </option>
-              </select>
-            </div>
-            <div class="dropdown-group">
-              <label>Tense</label>
-              <select v-model="selections.verb_tense" @change="updateChoices" :disabled="choices.verb_tense?.requirement === 'disabled'">
-                <option value="">Select...</option>
-                <option v-for="[key, label] in choices.verb_tense?.choices || []" :key="key" :value="key">
-                  {{ label }}
-                </option>
-              </select>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Sentence Display -->
-      <div class="sentence-section">
-        <div v-if="sentence.length > 0" class="sentence-display">
-          <span v-for="(word, index) in sentence" :key="index" :class="'word-' + word.type">
-            {{ word.text }}{{ index < sentence.length - 1 ? ' ' : '' }}
-          </span>
-        </div>
-        <div v-else class="sentence-placeholder">
-          Your sentence isn't valid yet, please select more words.
-        </div>
-
-        <div class="button-row">
-          <button v-if="sentence.length === 0" @click="randomize" class="btn btn-secondary" :disabled="loading">
-            {{ loading ? 'Loading...' : 'Randomize Choices' }}
-          </button>
-          <button v-if="sentence.length > 0" @click="translate" class="btn btn-primary" :disabled="translating">
-            {{ translating ? 'Translating...' : 'Translate' }}
+      <template v-else-if="sentenceTypes.length > 0">
+        <!-- Sentence Type Tabs -->
+        <div class="sentence-type-tabs">
+          <button
+            v-for="st in sentenceTypes"
+            :key="st.sentence_type"
+            :class="{ active: activeSentenceType === st.sentence_type }"
+            @click="switchSentenceType(st)"
+          >
+            {{ formatTypeName(st.sentence_type) }}
           </button>
         </div>
 
-        <div v-if="translation" class="translation-display">
-          <strong>English:</strong> {{ translation }}
+        <!-- Builder Grid -->
+        <div class="builder-grid" :style="gridStyle">
+          <div
+            v-for="(propSchema, propKey) in topLevelProperties"
+            :key="activeSentenceType + '-' + propKey"
+            class="builder-column"
+          >
+            <h2 class="column-title">{{ formatLabel(propKey) }}</h2>
+            <SchemaField
+              :modelValue="formData[propKey]"
+              @update:modelValue="updateTopLevel(propKey, $event)"
+              :schema="resolveSchema(propSchema, activeSchema)"
+              :rootSchema="activeSchema"
+              :fieldKey="propKey"
+              :required="true"
+              :depth="0"
+            />
+          </div>
         </div>
 
-        <div v-if="error" class="error-message">
-          {{ error }}
-        </div>
-      </div>
+        <!-- Sentence Display -->
+        <div class="sentence-section">
+          <div v-if="rendered" class="sentence-display">{{ rendered }}</div>
+          <div v-else class="sentence-placeholder">
+            Your sentence isn't valid yet, please select more words.
+          </div>
 
-      <!-- Help Modal -->
-      <div v-if="helpTopic" class="modal-overlay" @click="helpTopic = null">
-        <div class="modal-content" @click.stop>
-          <button class="modal-close" @click="helpTopic = null">&times;</button>
-          <div v-if="helpTopic === 'subject'">
-            <h3>Subject</h3>
-            <p>The <strong>subject</strong> is the doer of the action in a sentence.</p>
-            <p>You can choose a noun (like "dog" or "coyote") or a pronoun (like "I" or "he/she").</p>
-            <p>The <strong>suffix</strong> indicates proximity:</p>
-            <ul>
-              <li><strong>-ii</strong> (proximal): the subject is nearby or visible</li>
-              <li><strong>-uu</strong> (distal): the subject is far away or not visible</li>
-            </ul>
-            <p>Pronouns don't need a suffix.</p>
+          <div class="button-row">
+            <button @click="loadRandomExample" class="btn btn-secondary" :disabled="examples.length === 0">
+              Load Example
+            </button>
+            <button
+              v-if="rendered"
+              @click="translateToEnglish"
+              class="btn btn-primary"
+              :disabled="translating"
+            >
+              {{ translating ? 'Translating...' : 'Translate to English' }}
+            </button>
           </div>
-          <div v-else-if="helpTopic === 'object'">
-            <h3>Object</h3>
-            <p>The <strong>object</strong> is the receiver of the action in a sentence.</p>
-            <p>Not all sentences need an object - intransitive verbs (like "run" or "sleep") don't take objects.</p>
-            <p>The <strong>suffix</strong> indicates proximity:</p>
-            <ul>
-              <li><strong>-eika</strong> (proximal): the object is nearby or visible</li>
-              <li><strong>-oka</strong> (distal): the object is far away or not visible</li>
-            </ul>
+
+          <div v-if="translation" class="translation-display">
+            <strong>English:</strong> {{ translation }}
           </div>
-          <div v-else-if="helpTopic === 'verb'">
-            <h3>Verb</h3>
-            <p>The <strong>verb</strong> describes the action that the subject is taking.</p>
-            <p>The <strong>object pronoun</strong> is attached to the verb and must match the object's proximity (proximal or distal).</p>
-            <p>The <strong>tense</strong> indicates when the action takes place:</p>
-            <ul>
-              <li><strong>-ti</strong>: present ongoing (-ing)</li>
-              <li><strong>-dü</strong>: present simple</li>
-              <li><strong>-ku</strong>: completive (past)</li>
-              <li><strong>-wei</strong>: future (will)</li>
-              <li><strong>-pü</strong>: have done / am done</li>
-            </ul>
-          </div>
+
+          <div v-if="error" class="error-message">{{ error }}</div>
         </div>
+      </template>
+
+      <div v-else class="error-message">
+        No sentence types found for this language.
       </div>
     </div>
   </div>
 </template>
 
 <script>
-import { getChoices, getRandomSentence, translateBuilder } from '../services/api'
+import SchemaField from '../components/SchemaField.vue'
+import { getSentenceTypes, getSentenceExamples, renderSentence, toEnglish } from '../services/api'
+import { resolveSchema, buildDefaultValue, formatLabel, formatEnumValue } from '../services/schemaUtils'
 
 export default {
   name: 'Builder',
+  components: { SchemaField },
   data() {
     return {
-      choices: {},
-      sentence: [],
-      selections: {
-        subject_noun: '',
-        subject_suffix: '',
-        verb: '',
-        verb_tense: '',
-        object_pronoun: '',
-        object_noun: '',
-        object_suffix: ''
-      },
-      translation: '',
-      loading: false,
+      sentenceTypes: [],
+      activeSentenceType: null,
+      activeSchema: null,
+      formData: {},
+      rendered: '',
+      renderDebounceTimer: null,
+      examples: [],
+      translation: null,
       translating: false,
+      loading: true,
       error: '',
-      helpTopic: null
     }
   },
+  computed: {
+    topLevelProperties() {
+      if (!this.activeSchema?.properties) return {}
+      return this.activeSchema.properties
+    },
+    gridStyle() {
+      const count = Object.keys(this.topLevelProperties).length
+      return { gridTemplateColumns: `repeat(${count}, 1fr)` }
+    },
+  },
   async mounted() {
-    await this.updateChoices()
+    try {
+      this.sentenceTypes = await getSentenceTypes()
+      if (this.sentenceTypes.length > 0) {
+        await this.switchSentenceType(this.sentenceTypes[0])
+      }
+    } catch (err) {
+      this.error = err.message
+    } finally {
+      this.loading = false
+    }
   },
   methods: {
-    async updateChoices() {
-      this.loading = true
+    resolveSchema,
+    formatLabel,
+    formatEnumValue,
+    formatTypeName(name) {
+      // "SubjectVerbSentence" -> "Subject Verb"
+      return name
+        .replace(/Sentence$/, '')
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+    },
+    async switchSentenceType(st) {
+      this.activeSentenceType = st.sentence_type
+      this.activeSchema = st.json_schema
+      this.formData = buildDefaultValue(st.json_schema, st.json_schema)
+      this.rendered = ''
+      this.translation = null
       this.error = ''
-      this.translation = ''
       try {
-        const data = await getChoices(this.selections)
-        this.choices = data.choices
-        this.sentence = data.sentence || []
-
-        // Sync selections with returned values
-        for (const key of Object.keys(this.selections)) {
-          if (this.choices[key]) {
-            this.selections[key] = this.choices[key].value || ''
-          }
-        }
-      } catch (err) {
-        this.error = err.message
-      } finally {
-        this.loading = false
+        const res = await getSentenceExamples(st.sentence_type)
+        this.examples = res?.examples || []
+      } catch {
+        this.examples = []
       }
     },
-    async randomize() {
-      this.loading = true
-      this.error = ''
-      this.translation = ''
+    updateTopLevel(key, value) {
+      this.formData = { ...this.formData, [key]: value }
+      this.debouncedRender()
+    },
+    debouncedRender() {
+      clearTimeout(this.renderDebounceTimer)
+      this.renderDebounceTimer = setTimeout(() => this.tryRender(), 300)
+    },
+    async tryRender() {
       try {
-        const data = await getRandomSentence(this.selections)
-        this.choices = data.choices
-        this.sentence = data.sentence || []
-
-        // Sync selections with returned values
-        for (const key of Object.keys(this.selections)) {
-          if (this.choices[key]) {
-            this.selections[key] = this.choices[key].value || ''
-          }
+        const result = await renderSentence(this.activeSentenceType, this.formData)
+        if (result) {
+          this.rendered = result.rendered
+        } else {
+          this.rendered = ''
         }
-      } catch (err) {
-        this.error = err.message
-      } finally {
-        this.loading = false
+      } catch {
+        this.rendered = ''
       }
     },
-    async translate() {
+    async loadRandomExample() {
+      if (this.examples.length === 0) return
+      const example = this.examples[Math.floor(Math.random() * this.examples.length)]
+      this.formData = { ...example.structured }
+      this.translation = null
+      await this.tryRender()
+    },
+    async translateToEnglish() {
       this.translating = true
       this.error = ''
+      this.translation = null
       try {
-        const data = await translateBuilder(this.selections)
-        this.translation = data.translation
+        const result = await toEnglish(this.activeSentenceType, this.formData)
+        if (result) {
+          this.translation = result.english
+        } else {
+          this.error = 'Could not translate. Please check all fields are filled.'
+        }
       } catch (err) {
         this.error = err.message
       } finally {
         this.translating = false
       }
     },
-    showHelp(topic) {
-      this.helpTopic = topic
-    }
-  }
+  },
 }
 </script>
 
@@ -280,16 +213,50 @@ export default {
   color: var(--text-tertiary);
 }
 
+.loading {
+  text-align: center;
+  color: var(--text-tertiary);
+  padding: 2rem;
+}
+
+.sentence-type-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.sentence-type-tabs button {
+  padding: 0.5rem 1.5rem;
+  border: 1px solid var(--border-secondary);
+  border-radius: 0.25rem;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.sentence-type-tabs button.active {
+  background: var(--accent-primary);
+  color: white;
+  border-color: var(--accent-primary);
+}
+
+.sentence-type-tabs button:hover:not(.active) {
+  background: var(--bg-tertiary);
+}
+
 .builder-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
   gap: 1.5rem;
   margin-bottom: 2rem;
 }
 
 @media (max-width: 768px) {
   .builder-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
   }
 }
 
@@ -299,82 +266,26 @@ export default {
   border: 2px dashed var(--border-secondary);
 }
 
-.subject-column {
+.builder-column:nth-child(1) {
   border-color: #dc3545;
 }
 
-.object-column {
+.builder-column:nth-child(2) {
+  border-color: #007bff;
+}
+
+.builder-column:nth-child(3) {
   border-color: #28a745;
 }
 
-.verb-column {
-  border-color: #007bff;
+.builder-column:nth-child(4) {
+  border-color: #fd7e14;
 }
 
 .column-title {
   font-size: 1.25rem;
   text-align: center;
   margin-bottom: 1rem;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.help-button {
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 50%;
-  border: 1px solid var(--border-secondary);
-  background: var(--bg-secondary);
-  color: var(--text-tertiary);
-  cursor: pointer;
-  font-size: 0.875rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.help-button:hover {
-  background: var(--bg-tertiary);
-}
-
-.dropdown-group {
-  margin-bottom: 1rem;
-}
-
-.dropdown-group label {
-  display: block;
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-  margin-bottom: 0.25rem;
-}
-
-.dropdown-group select {
-  width: 100%;
-  padding: 0.5rem;
-  border: 1px solid var(--border-secondary);
-  border-radius: 0.25rem;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-size: 1rem;
-}
-
-.dropdown-group select:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.dropdown-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.5rem;
-}
-
-@media (max-width: 768px) {
-  .dropdown-row {
-    grid-template-columns: 1fr;
-  }
 }
 
 .sentence-section {
@@ -388,18 +299,6 @@ export default {
   font-size: 1.5rem;
   font-weight: 600;
   margin-bottom: 1rem;
-}
-
-.word-subject {
-  color: #dc3545;
-}
-
-.word-object {
-  color: #28a745;
-}
-
-.word-verb {
-  color: #007bff;
 }
 
 .sentence-placeholder {
@@ -421,6 +320,7 @@ export default {
   border-radius: 0.25rem;
   cursor: pointer;
   font-size: 1rem;
+  font-family: inherit;
   transition: background 0.2s;
 }
 
@@ -462,58 +362,5 @@ export default {
   padding: 1rem;
   border-radius: 0.25rem;
   margin-top: 1rem;
-}
-
-/* Modal */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-content {
-  background: var(--bg-primary);
-  padding: 2rem;
-  border-radius: 0.5rem;
-  max-width: 500px;
-  width: 90%;
-  max-height: 80vh;
-  overflow-y: auto;
-  position: relative;
-}
-
-.modal-close {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
-  color: var(--text-tertiary);
-}
-
-.modal-content h3 {
-  margin-bottom: 1rem;
-}
-
-.modal-content p {
-  margin-bottom: 0.75rem;
-}
-
-.modal-content ul {
-  margin-left: 1.5rem;
-  margin-bottom: 0.75rem;
-}
-
-.modal-content li {
-  margin-bottom: 0.25rem;
 }
 </style>
